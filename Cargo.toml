@@ -15,10 +15,6 @@ panic = "abort"
 
 [dependencies]
 kaspa-p2p-lib = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
-kaspa-connectionmanager = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
-kaspa-wrpc-client = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
-kaspa-rpc-core = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
-kaspa-p2p-flows = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
 kaspa-utils = { git = "https://github.com/kaspanet/rusty-kaspa.git", tag = "v0.15.2" }
 
 clap = { version = "4.5.16", features = ["derive"] }
