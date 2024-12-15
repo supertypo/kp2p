@@ -1,6 +1,6 @@
-mod address_flow;
+mod initializer;
 
-use crate::address_flow::{Initializer, ROUTER};
+use crate::initializer::{Initializer, ROUTER};
 use chrono::{DateTime, Utc};
 use clap::{Parser, ValueEnum};
 use kaspa_p2p_lib::pb::kaspad_message::Payload;
