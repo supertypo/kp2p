@@ -41,6 +41,8 @@ jobs:
         run: |
           docker buildx build --pull \
             --platform linux/amd64,linux/arm64 \
+            --build-arg COMMIT_ID=${{ env.SHORT_SHA }} \
+            --build-arg VERSION=${{ github.ref_name }} \
             -t supertypo/kp2p:${{ env.SHORT_SHA }} \
             -t supertypo/kp2p:${{ github.ref_name }} \
             -t supertypo/kp2p:dev \
@@ -52,6 +54,8 @@ jobs:
         run: |
           docker buildx build --pull \
             --platform linux/amd64,linux/arm64 \
+            --build-arg COMMIT_ID=${{ env.SHORT_SHA }} \
+            --build-arg VERSION=${{ github.ref_name }} \
             -t supertypo/kp2p:${{ env.SHORT_SHA }} \
             -t supertypo/kp2p:${{ github.ref_name }} \
             -t supertypo/kp2p:latest \
