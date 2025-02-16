@@ -35,7 +35,7 @@ impl ConnectionInitializer for Initializer {
         let sender = self.sender.clone();
         tokio::spawn(async move {
             while let Some(msg) = incoming_route.recv().await {
-                if !sender.send(msg).await.is_ok() {
+                if sender.send(msg).await.is_err() {
                     break;
                 }
             }
