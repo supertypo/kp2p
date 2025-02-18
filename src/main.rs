@@ -2,9 +2,9 @@ mod initializer;
 
 use crate::initializer::{Initializer, ROUTER};
 use chrono::{DateTime, Utc};
-use clap::{Parser, ValueEnum};
+use clap::{Parser, Subcommand};
 use kaspa_p2p_lib::pb::kaspad_message::Payload;
-use kaspa_p2p_lib::pb::{KaspadMessage, RequestAddressesMessage};
+use kaspa_p2p_lib::pb::{KaspadMessage, PingMessage, RequestAddressesMessage};
 use kaspa_p2p_lib::{make_message, Hub, Router};
 use kaspa_utils::hex::ToHex;
 use kaspa_utils::networking::IpAddress;
@@ -16,9 +16,10 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio::sync::mpsc::Receiver;
 
-#[derive(ValueEnum, Clone, Debug)]
+#[derive(Subcommand, Clone, Debug)]
 enum RequestType {
     Version,
+    Ping { nonce: u64 },
     Addresses,
 }
 
@@ -28,7 +29,7 @@ struct Cli {
     url: String,
     #[clap(short, long, default_value = "mainnet", help = "The network type and suffix, e.g. 'testnet-11'")]
     pub network: String,
-    #[clap(value_enum, help = "Request type")]
+    #[clap(subcommand)]
     pub request: RequestType,
 }
 
@@ -43,6 +44,11 @@ struct Version {
     pub user_agent: String,
     pub disable_relay_tx: bool,
     pub subnetwork_id: Option<String>,
+}
+
+#[derive(Eq, PartialEq, Hash, Serialize)]
+struct Pong {
+    nonce: u64,
 }
 
 #[derive(Eq, PartialEq, Hash, Serialize)]
@@ -67,6 +73,7 @@ async fn main() {
 
     match cli_args.request {
         RequestType::Version => req_version(&mut receiver).await,
+        RequestType::Ping { nonce } => req_ping(&mut receiver, router, nonce).await,
         RequestType::Addresses => req_addresses(&mut receiver, router).await,
     }
     adaptor.terminate_all_peers().await;
@@ -90,7 +97,21 @@ async fn req_version(receiver: &mut Receiver<KaspadMessage>) {
                     disable_relay_tx: version_msg.disable_relay_tx,
                     subnetwork_id: version_msg.subnetwork_id.map(|s| s.bytes.to_hex()),
                 };
-                let json = serde_json::to_string(&version).unwrap();
+                let json = serde_json::to_string_pretty(&version).unwrap();
+                println!("{}", json);
+                break;
+            }
+        }
+    }
+}
+
+async fn req_ping(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>, nonce: u64) {
+    let _ = router.enqueue(make_message!(Payload::Ping, PingMessage { nonce })).await;
+
+    loop {
+        if let Some(msg) = receiver.recv().await {
+            if let Some(Payload::Pong(pong_msg)) = msg.payload {
+                let json = serde_json::to_string_pretty(&Pong { nonce: pong_msg.nonce }).unwrap();
                 println!("{}", json);
                 break;
             }
@@ -116,7 +137,7 @@ async fn req_addresses(receiver: &mut Receiver<KaspadMessage>, router: Arc<Route
                         addresses.insert(NetAddress { ip: ip.to_canonical(), port });
                     }
                 }
-                let json = serde_json::to_string(&addresses).unwrap();
+                let json = serde_json::to_string_pretty(&addresses).unwrap();
                 println!("{}", json);
                 break;
             }
