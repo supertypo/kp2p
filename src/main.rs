@@ -24,6 +24,7 @@ enum RequestType {
 }
 
 #[derive(Parser)]
+#[command(version = env!("VERGEN_GIT_DESCRIBE"))]
 struct Cli {
     #[clap(short = 's', long, default_value = "localhost:16111", help = "The ip:port of a kaspad instance")]
     url: String,

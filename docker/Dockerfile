@@ -1,7 +1,7 @@
 ##
 # builder image
 ##
-FROM rust:1.81-alpine AS builder
+FROM rust:1.83-alpine AS builder
 
 RUN apk --no-cache add \
   musl-dev \
@@ -11,8 +11,6 @@ RUN apk --no-cache add \
   linux-headers \
   wasm-pack \
   openssl-dev
-
-RUN rustup component add rustfmt
 
 WORKDIR /work
 
@@ -30,17 +28,14 @@ RUN cargo build --release
 ##
 FROM alpine
 
-RUN apk --no-cache add libstdc++
+ARG VERSION
+ENV VERSION=$VERSION
 
-USER 13337:13337
+RUN apk --no-cache add libstdc++
 
 COPY --from=builder /work/target/release/kp2p /usr/local/bin/
 
-ARG VERSION
-ARG COMMIT_ID
-
-ENV VERSION=$VERSION \
-  COMMIT_ID=$COMMIT_ID
+USER 13337:13337
 
 ENTRYPOINT ["kp2p"]
 CMD ["--help"]
