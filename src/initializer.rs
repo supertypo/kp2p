@@ -35,12 +35,9 @@ impl ConnectionInitializer for Initializer {
         let sender = self.sender.clone();
         tokio::spawn(async move {
             while let Some(msg) = incoming_route.recv().await {
-                if !sender.send(msg).await.is_ok() {
-                    break;
-                }
+                let _ = sender.send(msg).await;
             }
         });
-
         handshake.exchange_ready_messages().await?;
         Ok(())
     }
@@ -48,12 +45,12 @@ impl ConnectionInitializer for Initializer {
 
 fn build_dummy_version_message(cli_args: Arc<Cli>) -> VersionMessage {
     VersionMessage {
-        protocol_version: 6,
+        protocol_version: 7,
         services: 0,
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64,
         address: None,
         id: Vec::from(Uuid::new_v4().as_bytes()),
-        user_agent: "kp2p".to_string(),
+        user_agent: format!("kp2p-{}", env!("VERGEN_GIT_DESCRIBE")),
         disable_relay_tx: true,
         subnetwork_id: None,
         network: format!("kaspa-{}", cli_args.network.to_lowercase()),
