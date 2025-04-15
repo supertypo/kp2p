@@ -186,12 +186,13 @@ async fn req_utxoset(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>
     } else {
         panic!("Pruning point is mandatory for utxo-set retrieval");
     };
-    let _ = router
+    router
         .enqueue(make_message!(
             Payload::RequestPruningPointUtxoSet,
-            RequestPruningPointUtxoSetMessage { pruning_point_hash: Some(Hash { bytes: hex::decode(pruning_point).unwrap() }) }
+            RequestPruningPointUtxoSetMessage { pruning_point_hash: Some(Hash { bytes: hex::decode(&pruning_point).unwrap() }) }
         ))
-        .await;
+        .await
+        .unwrap();
 
     let prefix = Prefix::from(NetworkId::from_str(network.as_str()).unwrap());
     let mut i = 0;
@@ -225,23 +226,23 @@ async fn req_utxoset(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>
                         println!("{},", json);
                         i += 1;
                         if i % IBD_BATCH_SIZE == 0 {
-                            let _ = router
+                            router
                                 .enqueue(make_message!(
                                     Payload::RequestNextPruningPointUtxoSetChunk,
                                     RequestNextPruningPointUtxoSetChunkMessage {}
                                 ))
-                                .await;
+                                .await
+                                .unwrap();
                         }
                     }
-                    Some(Payload::DonePruningPointUtxoSetChunks(_)) => {
-                        println!("Finished receiving utxos");
-                        break;
-                    }
+                    Some(Payload::DonePruningPointUtxoSetChunks(_)) => break,
+                    Some(Payload::UnexpectedPruningPoint(_)) => panic!("Invalid pruning point"),
+
                     Some(Payload::RequestAddresses(_)) => {
-                        let _ = router.enqueue(make_message!(Payload::Addresses, AddressesMessage { address_list: vec![] })).await;
+                        router.enqueue(make_message!(Payload::Addresses, AddressesMessage { address_list: vec![] })).await.unwrap();
                     }
                     Some(Payload::Ping(ping_msg)) => {
-                        let _ = router.enqueue(make_message!(Payload::Pong, PongMessage { nonce: ping_msg.nonce })).await;
+                        router.enqueue(make_message!(Payload::Pong, PongMessage { nonce: ping_msg.nonce })).await.unwrap();
                     }
                     Some(_) => {}
                     None => panic!("Got message with empty payload"),
