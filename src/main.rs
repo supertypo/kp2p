@@ -32,7 +32,7 @@ enum RequestType {
     Version,
     Ping { nonce: u64 },
     Addresses,
-    UtxoSet,
+    UtxoSet { pruning_point: String },
 }
 
 #[derive(Parser)]
@@ -42,8 +42,6 @@ struct Cli {
     url: String,
     #[clap(short, long, default_value = "mainnet", help = "The network type and suffix, e.g. 'testnet-11'")]
     pub network: String,
-    #[clap(long, help = "Pruning point hash, required for utxo-set")]
-    pub pruning_point: Option<String>,
     #[clap(subcommand)]
     pub request: RequestType,
 }
@@ -105,11 +103,11 @@ async fn main() {
 
     let router = ROUTER.read().unwrap().clone().unwrap();
 
-    match cli_args.request {
+    match cli_args.request.clone() {
         RequestType::Version => req_version(&mut receiver).await,
         RequestType::Ping { nonce } => req_ping(&mut receiver, router, nonce).await,
         RequestType::Addresses => req_addresses(&mut receiver, router).await,
-        RequestType::UtxoSet => req_utxoset(&mut receiver, router, cli_args.network.clone(), cli_args.pruning_point.clone()).await,
+        RequestType::UtxoSet { pruning_point } => req_utxoset(&mut receiver, router, cli_args.network.clone(), pruning_point).await,
     }
     adaptor.terminate_all_peers().await;
 }
@@ -180,12 +178,7 @@ async fn req_addresses(receiver: &mut Receiver<KaspadMessage>, router: Arc<Route
     }
 }
 
-async fn req_utxoset(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>, network: String, pruning_point: Option<String>) {
-    let pruning_point = if let Some(pruning_point) = pruning_point {
-        pruning_point
-    } else {
-        panic!("Pruning point is mandatory for utxo-set retrieval");
-    };
+async fn req_utxoset(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>, network: String, pruning_point: String) {
     router
         .enqueue(make_message!(
             Payload::RequestPruningPointUtxoSet,
