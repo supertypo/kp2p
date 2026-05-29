@@ -12,7 +12,7 @@ use kaspa_p2p_lib::pb::{
     AddressesMessage, Hash, KaspadMessage, PingMessage, PongMessage, RequestAddressesMessage,
     RequestNextPruningPointUtxoSetChunkMessage, RequestPruningPointUtxoSetMessage,
 };
-use kaspa_p2p_lib::{make_message, Hub, Router};
+use kaspa_p2p_lib::{Hub, Router, make_message};
 use kaspa_txscript::extract_script_pub_key_address;
 use kaspa_utils::hex::ToHex;
 use kaspa_utils::networking::IpAddress;
@@ -115,26 +115,26 @@ async fn main() {
 
 async fn req_version(receiver: &mut Receiver<KaspadMessage>) {
     loop {
-        if let Some(msg) = receiver.recv().await {
-            if let Some(Payload::Version(version_msg)) = msg.payload {
-                let version = Version {
-                    protocol_version: version_msg.protocol_version,
-                    network: version_msg.network,
-                    services: version_msg.services,
-                    timestamp: DateTime::from_timestamp_millis(version_msg.timestamp),
-                    address: version_msg
-                        .address
-                        .and_then(|a| a.try_into().ok())
-                        .map(|(ip, port)| NetAddress { ip: ip.to_canonical(), port }),
-                    id: version_msg.id.to_hex(),
-                    user_agent: version_msg.user_agent,
-                    disable_relay_tx: version_msg.disable_relay_tx,
-                    subnetwork_id: version_msg.subnetwork_id.map(|s| s.bytes.to_hex()),
-                };
-                let json = serde_json::to_string_pretty(&version).unwrap();
-                println!("{}", json);
-                break;
-            }
+        if let Some(msg) = receiver.recv().await
+            && let Some(Payload::Version(version_msg)) = msg.payload
+        {
+            let version = Version {
+                protocol_version: version_msg.protocol_version,
+                network: version_msg.network,
+                services: version_msg.services,
+                timestamp: DateTime::from_timestamp_millis(version_msg.timestamp),
+                address: version_msg
+                    .address
+                    .and_then(|a| a.try_into().ok())
+                    .map(|(ip, port)| NetAddress { ip: ip.to_canonical(), port }),
+                id: version_msg.id.to_hex(),
+                user_agent: version_msg.user_agent,
+                disable_relay_tx: version_msg.disable_relay_tx,
+                subnetwork_id: version_msg.subnetwork_id.map(|s| s.bytes.to_hex()),
+            };
+            let json = serde_json::to_string_pretty(&version).unwrap();
+            println!("{}", json);
+            break;
         }
     }
 }
@@ -143,12 +143,12 @@ async fn req_ping(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>, n
     let _ = router.enqueue(make_message!(Payload::Ping, PingMessage { nonce })).await;
 
     loop {
-        if let Some(msg) = receiver.recv().await {
-            if let Some(Payload::Pong(pong_msg)) = msg.payload {
-                let json = serde_json::to_string_pretty(&Pong { nonce: pong_msg.nonce }).unwrap();
-                println!("{}", json);
-                break;
-            }
+        if let Some(msg) = receiver.recv().await
+            && let Some(Payload::Pong(pong_msg)) = msg.payload
+        {
+            let json = serde_json::to_string_pretty(&Pong { nonce: pong_msg.nonce }).unwrap();
+            println!("{}", json);
+            break;
         }
     }
 }
@@ -162,19 +162,19 @@ async fn req_addresses(receiver: &mut Receiver<KaspadMessage>, router: Arc<Route
         .await;
 
     loop {
-        if let Some(msg) = receiver.recv().await {
-            if let Some(Payload::Addresses(addresses_msg)) = msg.payload {
-                let mut addresses = HashSet::new();
-                for address in addresses_msg.address_list {
-                    if let Ok(result) = address.try_into() {
-                        let (ip, port): (IpAddress, u16) = result;
-                        addresses.insert(NetAddress { ip: ip.to_canonical(), port });
-                    }
+        if let Some(msg) = receiver.recv().await
+            && let Some(Payload::Addresses(addresses_msg)) = msg.payload
+        {
+            let mut addresses = HashSet::new();
+            for address in addresses_msg.address_list {
+                if let Ok(result) = address.try_into() {
+                    let (ip, port): (IpAddress, u16) = result;
+                    addresses.insert(NetAddress { ip: ip.to_canonical(), port });
                 }
-                let json = serde_json::to_string_pretty(&addresses).unwrap();
-                println!("{}", json);
-                break;
             }
+            let json = serde_json::to_string_pretty(&addresses).unwrap();
+            println!("{}", json);
+            break;
         }
     }
 }
