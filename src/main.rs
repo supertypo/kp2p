@@ -91,6 +91,7 @@ pub const TIMEOUT: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 async fn main() {
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let cli_args = Arc::new(Cli::parse());
 
     let (sender, mut receiver) = mpsc::channel(10000);
