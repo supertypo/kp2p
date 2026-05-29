@@ -47,11 +47,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Read Rust version from Cargo.toml
-        run: echo "RUST_VERSION=$(awk -F'"' '/^[[:space:]]*rust-version[[:space:]]*=/ {print $2; exit}' Cargo.toml)" >> $GITHUB_ENV
-
       - name: Git describe version
         run: echo "GIT_VERSION=$(git describe --tags --always)" >> $GITHUB_ENV
+
+      - name: Read Rust version from Cargo.toml
+        run: echo "RUST_VERSION=$(awk -F'"' '/^[[:space:]]*rust-version[[:space:]]*=/ {print $2; exit}' Cargo.toml)" >> $GITHUB_ENV
 
       - name: Build and push by digest
         id: build
@@ -62,8 +62,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            RUST_VERSION=${{ env.RUST_VERSION }}
             VERSION=${{ env.GIT_VERSION }}
+            RUST_VERSION=${{ env.RUST_VERSION }}
           outputs: type=image,"name=${{ vars.DOCKER_REPO }}",push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest

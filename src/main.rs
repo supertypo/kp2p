@@ -99,7 +99,8 @@ async fn main() {
     let adaptor = kaspa_p2p_lib::Adaptor::client_only(Hub::new(), initializer, Default::default());
 
     if let Err(e) = adaptor.connect_peer_with_retries(cli_args.url.clone(), 3, Duration::from_secs(1)).await {
-        panic!("Failed to connect to {}: {:?}", cli_args.url, e);
+        eprintln!("Failed to connect to {}: {e}", cli_args.url);
+        std::process::exit(1);
     }
 
     let router = ROUTER.read().unwrap().clone().unwrap();

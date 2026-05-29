@@ -1,15 +1,17 @@
 use crate::Cli;
 use kaspa_p2p_lib::common::ProtocolError;
 use kaspa_p2p_lib::pb::kaspad_message::Payload;
-use kaspa_p2p_lib::pb::{KaspadMessage, VersionMessage};
-use kaspa_p2p_lib::{ConnectionInitializer, IncomingRoute, KaspadHandshake, KaspadMessagePayloadType, Router};
+use kaspa_p2p_lib::pb::{KaspadMessage, ReadyMessage, VerackMessage, VersionMessage};
+use kaspa_p2p_lib::{ConnectionInitializer, IncomingRoute, KaspadMessagePayloadType, Router, dequeue_with_timeout, make_message};
 use std::sync::{Arc, RwLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::sync::mpsc::Sender;
 use tonic::async_trait;
 use uuid::Uuid;
 
 pub static ROUTER: RwLock<Option<Arc<Router>>> = RwLock::new(None);
+
+const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub struct Initializer {
     cli_args: Arc<Cli>,
@@ -26,10 +28,28 @@ impl Initializer {
 impl ConnectionInitializer for Initializer {
     async fn initialize_connection(&self, router: Arc<Router>) -> Result<(), ProtocolError> {
         ROUTER.write().unwrap().replace(router.clone());
-        let mut handshake = KaspadHandshake::new(&router);
+
+        let mut version_route = router.subscribe(vec![KaspadMessagePayloadType::Version]);
+        let mut verack_route = router.subscribe(vec![KaspadMessagePayloadType::Verack]);
+        let mut ready_route = router.subscribe(vec![KaspadMessagePayloadType::Ready]);
+
         router.start();
-        let version_msg = handshake.handshake(build_dummy_version_message(self.cli_args.clone())).await?;
-        self.sender.send(KaspadMessage { request_id: 0, response_id: 0, payload: Some(Payload::Version(version_msg)) }).await.unwrap();
+
+        let peer_version: VersionMessage = dequeue_with_timeout!(version_route, Payload::Version, HANDSHAKE_TIMEOUT)?;
+        let expected_network = format!("kaspa-{}", self.cli_args.network.to_lowercase());
+        if peer_version.network != expected_network {
+            return Err(ProtocolError::WrongNetwork(expected_network, peer_version.network));
+        }
+        router.enqueue(make_message!(Payload::Verack, VerackMessage {})).await?;
+
+        let our_version = build_version_message(self.cli_args.clone(), &peer_version);
+        router.enqueue(make_message!(Payload::Version, our_version)).await?;
+        let _verack: VerackMessage = dequeue_with_timeout!(verack_route, Payload::Verack, HANDSHAKE_TIMEOUT)?;
+
+        self.sender
+            .send(KaspadMessage { request_id: 0, response_id: 0, payload: Some(Payload::Version(peer_version)) })
+            .await
+            .unwrap();
 
         let mut incoming_route = subscribe_all(&router);
         let sender = self.sender.clone();
@@ -38,15 +58,17 @@ impl ConnectionInitializer for Initializer {
                 let _ = sender.send(msg).await;
             }
         });
-        handshake.exchange_ready_messages().await?;
+
+        router.enqueue(make_message!(Payload::Ready, ReadyMessage {})).await?;
+        let _ready: ReadyMessage = dequeue_with_timeout!(ready_route, Payload::Ready, HANDSHAKE_TIMEOUT)?;
         Ok(())
     }
 }
 
-fn build_dummy_version_message(cli_args: Arc<Cli>) -> VersionMessage {
+fn build_version_message(cli_args: Arc<Cli>, peer: &VersionMessage) -> VersionMessage {
     VersionMessage {
-        protocol_version: 7,
-        services: 0,
+        protocol_version: peer.protocol_version,
+        services: peer.services,
         timestamp: SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_millis() as i64,
         address: None,
         id: Vec::from(Uuid::new_v4().as_bytes()),
