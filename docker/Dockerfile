@@ -6,12 +6,11 @@ FROM rust:${RUST_VERSION}-alpine AS builder
 
 RUN apk --no-cache add \
   musl-dev \
-  protobuf-dev \
   g++ \
-  clang15-dev \
   linux-headers \
-  wasm-pack \
-  openssl-dev
+  git \
+  protoc \
+  protobuf-dev
 
 WORKDIR /work
 
