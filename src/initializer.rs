@@ -1,4 +1,3 @@
-use crate::Cli;
 use kaspa_p2p_lib::common::ProtocolError;
 use kaspa_p2p_lib::pb::kaspad_message::Payload;
 use kaspa_p2p_lib::pb::{KaspadMessage, ReadyMessage, VerackMessage, VersionMessage};
@@ -14,13 +13,12 @@ pub static ROUTER: RwLock<Option<Arc<Router>>> = RwLock::new(None);
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub struct Initializer {
-    cli_args: Arc<Cli>,
     sender: Sender<KaspadMessage>,
 }
 
 impl Initializer {
-    pub fn new(cli_args: Arc<Cli>, sender: Sender<KaspadMessage>) -> Self {
-        Initializer { cli_args, sender }
+    pub fn new(sender: Sender<KaspadMessage>) -> Self {
+        Initializer { sender }
     }
 }
 
@@ -36,13 +34,9 @@ impl ConnectionInitializer for Initializer {
         router.start();
 
         let peer_version: VersionMessage = dequeue_with_timeout!(version_route, Payload::Version, HANDSHAKE_TIMEOUT)?;
-        let expected_network = format!("kaspa-{}", self.cli_args.network.to_lowercase());
-        if peer_version.network != expected_network {
-            return Err(ProtocolError::WrongNetwork(expected_network, peer_version.network));
-        }
         router.enqueue(make_message!(Payload::Verack, VerackMessage {})).await?;
 
-        let our_version = build_version_message(self.cli_args.clone(), &peer_version);
+        let our_version = build_version_message(&peer_version);
         router.enqueue(make_message!(Payload::Version, our_version)).await?;
         let _verack: VerackMessage = dequeue_with_timeout!(verack_route, Payload::Verack, HANDSHAKE_TIMEOUT)?;
 
@@ -65,7 +59,7 @@ impl ConnectionInitializer for Initializer {
     }
 }
 
-fn build_version_message(cli_args: Arc<Cli>, peer: &VersionMessage) -> VersionMessage {
+fn build_version_message(peer: &VersionMessage) -> VersionMessage {
     VersionMessage {
         protocol_version: peer.protocol_version,
         services: peer.services,
@@ -75,7 +69,7 @@ fn build_version_message(cli_args: Arc<Cli>, peer: &VersionMessage) -> VersionMe
         user_agent: format!("/kp2p:{}/", env!("VERGEN_GIT_DESCRIBE")),
         disable_relay_tx: true,
         subnetwork_id: None,
-        network: format!("kaspa-{}", cli_args.network.to_lowercase()),
+        network: peer.network.clone(),
     }
 }
 

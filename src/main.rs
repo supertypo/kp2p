@@ -40,8 +40,6 @@ enum RequestType {
 struct Cli {
     #[clap(short = 's', long, default_value = "localhost:16111", help = "The ip:port of a kaspad instance")]
     url: String,
-    #[clap(short, long, default_value = "mainnet", help = "The network type and suffix, e.g. 'testnet-11'")]
-    pub network: String,
     #[clap(subcommand)]
     pub request: RequestType,
 }
@@ -95,7 +93,7 @@ async fn main() {
     let cli_args = Arc::new(Cli::parse());
 
     let (sender, mut receiver) = mpsc::channel(10000);
-    let initializer = Arc::new(Initializer::new(cli_args.clone(), sender));
+    let initializer = Arc::new(Initializer::new(sender));
     let adaptor = kaspa_p2p_lib::Adaptor::client_only(Hub::new(), initializer, Default::default());
 
     if let Err(e) = adaptor.connect_peer_with_retries(cli_args.url.clone(), 3, Duration::from_secs(1)).await {
@@ -104,40 +102,44 @@ async fn main() {
     }
 
     let router = ROUTER.read().unwrap().clone().unwrap();
+    let peer_version = recv_peer_version(&mut receiver).await;
 
     match cli_args.request.clone() {
-        RequestType::Version => req_version(&mut receiver).await,
+        RequestType::Version => print_version(peer_version),
         RequestType::Ping { nonce } => req_ping(&mut receiver, router, nonce).await,
         RequestType::Addresses => req_addresses(&mut receiver, router).await,
-        RequestType::UtxoSet { pruning_point } => req_utxoset(&mut receiver, router, cli_args.network.clone(), pruning_point).await,
+        RequestType::UtxoSet { pruning_point } => req_utxoset(&mut receiver, router, peer_version.network, pruning_point).await,
     }
     adaptor.terminate_all_peers().await;
 }
 
-async fn req_version(receiver: &mut Receiver<KaspadMessage>) {
+async fn recv_peer_version(receiver: &mut Receiver<KaspadMessage>) -> kaspa_p2p_lib::pb::VersionMessage {
     loop {
         if let Some(msg) = receiver.recv().await
-            && let Some(Payload::Version(version_msg)) = msg.payload
+            && let Some(Payload::Version(v)) = msg.payload
         {
-            let version = Version {
-                protocol_version: version_msg.protocol_version,
-                network: version_msg.network,
-                services: version_msg.services,
-                timestamp: DateTime::from_timestamp_millis(version_msg.timestamp),
-                address: version_msg
-                    .address
-                    .and_then(|a| a.try_into().ok())
-                    .map(|(ip, port)| NetAddress { ip: ip.to_canonical(), port }),
-                id: version_msg.id.to_hex(),
-                user_agent: version_msg.user_agent,
-                disable_relay_tx: version_msg.disable_relay_tx,
-                subnetwork_id: version_msg.subnetwork_id.map(|s| s.bytes.to_hex()),
-            };
-            let json = serde_json::to_string_pretty(&version).unwrap();
-            println!("{}", json);
-            break;
+            return v;
         }
     }
+}
+
+fn print_version(version_msg: kaspa_p2p_lib::pb::VersionMessage) {
+    let version = Version {
+        protocol_version: version_msg.protocol_version,
+        network: version_msg.network,
+        services: version_msg.services,
+        timestamp: DateTime::from_timestamp_millis(version_msg.timestamp),
+        address: version_msg
+            .address
+            .and_then(|a| a.try_into().ok())
+            .map(|(ip, port)| NetAddress { ip: ip.to_canonical(), port }),
+        id: version_msg.id.to_hex(),
+        user_agent: version_msg.user_agent,
+        disable_relay_tx: version_msg.disable_relay_tx,
+        subnetwork_id: version_msg.subnetwork_id.map(|s| s.bytes.to_hex()),
+    };
+    let json = serde_json::to_string_pretty(&version).unwrap();
+    println!("{}", json);
 }
 
 async fn req_ping(receiver: &mut Receiver<KaspadMessage>, router: Arc<Router>, nonce: u64) {
